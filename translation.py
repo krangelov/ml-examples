@@ -1,8 +1,4 @@
-import logging
-import time
-
 import numpy as np
-import matplotlib.pyplot as plt
 
 import tensorflow_datasets as tfds
 import tensorflow as tf
@@ -55,16 +51,6 @@ def train():
     train_batches = make_batches(train_examples)
     val_batches = make_batches(val_examples)
 
-    for (pt, en), en_labels in train_batches.take(1):
-      break
-
-    print(pt.shape)
-    print(en.shape)
-    print(en_labels.shape)
-
-    print(en[0][:10])
-    print(en_labels[0][:10])
-
     def positional_encoding(length, depth):
       depth = depth/2
 
@@ -98,14 +84,6 @@ def train():
         x = x + self.pos_encoding[tf.newaxis, :length, :]
         return x
 
-    embed_pt = PositionalEmbedding(vocab_size=tokenizers.pt.get_vocab_size(), d_model=512)
-    embed_en = PositionalEmbedding(vocab_size=tokenizers.en.get_vocab_size(), d_model=512)
-
-    pt_emb = embed_pt(pt)
-    en_emb = embed_en(en)
-
-    print(en_emb.shape)
-
     class BaseAttention(tf.keras.layers.Layer):
       def __init__(self, **kwargs):
         super().__init__()
@@ -128,12 +106,6 @@ def train():
         x = self.layernorm(x)
 
         return x
-
-    sample_ca = CrossAttention(num_heads=2, key_dim=512)
-
-    print(pt_emb.shape)
-    print(en_emb.shape)
-    print(sample_ca(en_emb, pt_emb).shape)
 
     class GlobalSelfAttention(BaseAttention):
       def call(self, x):
@@ -337,15 +309,6 @@ def train():
         input_vocab_size=tokenizers.pt.get_vocab_size().numpy(),
         target_vocab_size=tokenizers.en.get_vocab_size().numpy(),
         dropout_rate=dropout_rate)
-
-    output = transformer((pt, en))
-
-    print(en.shape)
-    print(pt.shape)
-    print(output.shape)
-
-    transformer.summary()
-
 
     class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
       def __init__(self, d_model, warmup_steps=4000):
