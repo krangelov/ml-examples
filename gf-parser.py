@@ -3,6 +3,9 @@ import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
 
+MAX_SENTENCE = 56
+MAX_ABSTRACT = 158
+
 def flatten(expr,pad):
     funs = ["[START]"]
     def flatten(expr,arity):
@@ -58,8 +61,8 @@ def train():
             while True:
                 line = next(i)
                 if line[:4] == "abs:":
-                    abs = flatten(pgf.readExpr(line[5:]),77)
-                    cnc = tokenize(next(i)[5:-1],23)
+                    abs = flatten(pgf.readExpr(line[5:]),MAX_ABSTRACT)
+                    cnc = tokenize(next(i)[5:-1],MAX_SENTENCE)
                     for fun in abs:
                         abs_vocab.add(fun)
                     for w in cnc:
@@ -333,7 +336,7 @@ def train():
             super().__init__()
             self.transformer = transformer
 
-        @tf.function(input_signature=[tf.TensorSpec(shape=[None,23], dtype=tf.int64),tf.TensorSpec(shape=[None,76], dtype=tf.int64)])
+        @tf.function(input_signature=[tf.TensorSpec(shape=[None,MAX_SENTENCE], dtype=tf.int64),tf.TensorSpec(shape=[None,MAX_ABSTRACT], dtype=tf.int64)])
         def __call__(self, sentence, c):
             logits = self.transformer((sentence, c), training=False)
             return logits, self.transformer.last_attn_scores
@@ -464,7 +467,7 @@ def use():
 
     while True:
         s = input("> ")
-        sentence = ids_from_cnc([tokenize(s,23)])
+        sentence = ids_from_cnc([tokenize(s,MAX_SENTENCE)])
 
         output = list(ids_from_abs(["[START]"]+["[PAD]"]*75).numpy())
 
@@ -481,9 +484,7 @@ def use():
             
         print(abs_from_ids(output))
         
-        plot_attention_weights(tokenize(s,23), abs_from_ids(output), attn_scores)
-
-
+        plot_attention_weights(tokenize(s,MAX_SENTENCE), abs_from_ids(output), attn_scores)
 
 train()
 #use()
