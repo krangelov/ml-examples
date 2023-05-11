@@ -3,8 +3,8 @@ import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
 
-MAX_SENTENCE = 56
-MAX_ABSTRACT = 158
+MAX_SENTENCE = 23
+MAX_ABSTRACT = 77
 
 def flatten(expr,pad):
     funs = ["[START]"]
@@ -52,7 +52,7 @@ def tokenize(line,pad):
     return words
 
 def train():
-    with open("corpus.txt") as f:
+    with open("../GF/gf-wordnet/examples.txt") as f:
         i = iter(f)
         abs_vocab = set()
         cnc_vocab = set()
@@ -336,7 +336,7 @@ def train():
             super().__init__()
             self.transformer = transformer
 
-        @tf.function(input_signature=[tf.TensorSpec(shape=[None,MAX_SENTENCE], dtype=tf.int64),tf.TensorSpec(shape=[None,MAX_ABSTRACT], dtype=tf.int64)])
+        @tf.function(input_signature=[tf.TensorSpec(shape=[None,MAX_SENTENCE], dtype=tf.int64),tf.TensorSpec(shape=[None,MAX_ABSTRACT-1], dtype=tf.int64)])
         def __call__(self, sentence, c):
             logits = self.transformer((sentence, c), training=False)
             return logits, self.transformer.last_attn_scores
