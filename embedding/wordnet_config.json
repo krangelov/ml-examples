@@ -1,0 +1,13 @@
+{
+  "embeddings": [
+    {
+      "tensorName": "WordNet Embedding",
+      "tensorShape": [
+        1000,
+        50
+      ],
+      "tensorPath": "https://cloud.grammaticalframework.org/wordnet/vectors.tsv",
+      "metadataPath": "https://cloud.grammaticalframework.org/wordnet/meta.tsv"
+    }
+  ]
+}
