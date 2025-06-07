@@ -31,7 +31,9 @@ for i in tqdm(range(len(synsets)), desc="Building the graph"):
         for rel in (lexeme.antonyms()+
                     lexeme.participle()+
                     lexeme.alsosee()+
-                    lexeme.derived()):
+                    lexeme.derived()+
+                    lexeme.male()+
+                    lexeme.female()):
             graph.add_edge(lexeme.lex_fun, rel.lex_fun)
             count += 1
         for domain_id in lexeme.domain_ids:
