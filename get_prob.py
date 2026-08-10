@@ -4,11 +4,12 @@ import copy
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 
-model_name = "meta-llama/Meta-Llama-3-8B-Instruct"
+model_name = "meta-llama/Llama-3.2-3B"
 
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 model = AutoModelForCausalLM.from_pretrained(model_name,
-                                             dtype=torch.float16)
+                                             torch_dtype=torch.float16)
+model = model.to("cuda")
 
 gr = pgf.readPGF("../GF/gf-wordnet/build/ParseEng.pgf")
 langs = gr.languages
@@ -24,6 +25,7 @@ adjs  = groupby([adj  for adj  in gr.functionsByCat("A") if len(gr.functionType(
 nouns = groupby([noun for noun in gr.functionsByCat("N") if len(gr.functionType(noun).hypos) == 0])
 
 prob_threshold = 24
+batch_size = 1000
 
 with open("output.txt","w") as f:
     for adj_str,adj_lst in adjs.items():
@@ -31,12 +33,13 @@ with open("output.txt","w") as f:
 
         with torch.no_grad():
             adj_out = model(**adj_ids, use_cache=True)
-
         adj_log_probs = torch.log_softmax(adj_out.logits,dim=-1)
+
         token_log_probs = adj_log_probs.gather(
             2, adj_ids["input_ids"][:,1:].unsqueeze(-1)
         ).squeeze(-1)
         adj_log_prob = -token_log_probs.sum().item()
+        del token_log_probs
 
         adj_cache = adj_out.past_key_values
 
@@ -54,25 +57,31 @@ with open("output.txt","w") as f:
             continue
 
         print(len(sample))
-        noun_ids = [noun_ids for _,_,noun_ids,_ in sample]
-        noun_ids = torch.nn.utils.rnn.pad_sequence(noun_ids,
-                                                   batch_first=True,
-                                                   padding_value=tokenizer.eos_token_id)
-        adj_cache.batch_repeat_interleave(len(sample))
-        with torch.no_grad():
-            noun_out = model(input_ids=noun_ids,
-                             past_key_values=adj_cache)
-        noun_log_probs = torch.log_softmax(noun_out.logits,dim=-1)
-        for i in range(len(sample)):
-            adj_lst,noun_lst,ids,sentence_log_prob = sample[i]
+        for i in range(0,len(sample),batch_size):
+            noun_ids = [noun_ids for _,_,noun_ids,_ in sample[i:i+batch_size]]
+            noun_ids = torch.nn.utils.rnn.pad_sequence(noun_ids,
+                                                       batch_first=True,
+                                                       padding_value=tokenizer.eos_token_id)
+            batch_cache = copy.deepcopy(adj_cache)
+            batch_cache.batch_repeat_interleave(noun_ids.shape[0])
+            with torch.no_grad():
+                noun_out = model(input_ids=noun_ids,
+                                 past_key_values=batch_cache)
+            noun_log_probs = torch.log_softmax(noun_out.logits,dim=-1)
+            del noun_out
 
-            token_log_probs = noun_log_probs[i].gather(
-                1, ids[1:].unsqueeze(-1)
-            ).squeeze(-1)
-            sentence_log_prob += -token_log_probs.sum().item()
+            for j in range(noun_ids.shape[0]):
+                adj_lst,noun_lst,ids,sentence_log_prob = sample[i+j]
 
-            print(adj_lst,noun_lst,sentence_log_prob)
-            sample[i] = (adj_lst,noun_lst,sentence_log_prob)
+                token_log_probs = noun_log_probs[j].gather(
+                    1, ids[1:].unsqueeze(-1)
+                ).squeeze(-1)
+                sentence_log_prob += -token_log_probs.sum().item()
+
+                print(adj_lst,noun_lst,sentence_log_prob)
+                sample[i+j] = (adj_lst,noun_lst,sentence_log_prob)
+
+            del noun_log_probs
 
         sample.sort(key=lambda x: x[2])
         for adj_lst,noun_lst,sentence_log_prob in sample:
