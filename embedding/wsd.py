@@ -632,20 +632,20 @@ def train_model(args: argparse.Namespace) -> None:
                 batches += 1
 
         evaluation_loss, evaluation_accuracy = evaluate(model, evaluation_rows)
-        if args.taxonomy_only:
-            training_wsd_loss, training_accuracy = evaluate(model, training)
-        else:
-            training_wsd_loss = epoch_wsd_loss / batches
-            training_accuracy = epoch_correct / len(training)
         stats = {
                     "epoch": epoch,
                     "training_loss": epoch_total_loss / batches,
-                    "training_wsd_loss": training_wsd_loss,
-                    "training_accuracy": training_accuracy,
-                    
-                    "evaluation_loss": evaluation_loss,
                     "evaluation_accuracy": evaluation_accuracy,
                 }
+        if args.taxonomy_only:
+            training_wsd_loss, training_accuracy = evaluate(model, training)
+            stats.update({"training_accuracy": training_accuracy})
+        else:
+            training_wsd_loss = epoch_wsd_loss / batches
+            training_accuracy = epoch_correct / len(training)
+            stats.update({"evaluation_loss": evaluation_loss,
+                          "training_wsd_loss": training_wsd_loss,
+                          "training_accuracy": training_accuracy})
         if taxonomy != None:
             stats.update({"taxonomy_loss": epoch_taxonomy_loss / batches})
         print(json.dumps(stats))
