@@ -350,6 +350,7 @@ if torch is not None:
                 raise ValueError("the vocabulary must contain at least one function")
             self.indices = indices
             self.dimension = dimension
+            self.corpus_frozen_ids: Tensor | None = None
             self.node2vec_config = dict(node2vec_config or {})
             torch.manual_seed(seed)
             if taxonomy is not None:
@@ -384,7 +385,11 @@ if torch is not None:
             """Sum ``v_i dot W v_j`` over all distinct function positions."""
             if tokens.numel() < 2:
                 return self.embedding.weight.new_zeros(())
-            context = F.normalize(self.embedding(tokens))
+            embeddings = self.embedding(tokens)
+            if self.corpus_frozen_ids is not None:
+                frozen = self.corpus_frozen_ids[tokens].unsqueeze(-1)
+                embeddings = torch.where(frozen, embeddings.detach(), embeddings)
+            context = F.normalize(embeddings)
             all_pairs = torch.dot(context.sum(dim=0), context.sum(dim=0))
             self_pairs = (context * context).sum()
             return (all_pairs - self_pairs) / (tokens.numel() * (tokens.numel() - 1))
@@ -520,6 +525,10 @@ def train_model(args: argparse.Namespace) -> None:
     require_torch()
     if args.taxonomy_only and args.semantics is None:
         raise SystemExit("--taxonomy-only requires --semantics")
+    if args.corpus_non_taxonomy_only and args.semantics is None:
+        raise SystemExit("--corpus-non-taxonomy-only requires --semantics")
+    if args.corpus_non_taxonomy_only and args.taxonomy_only:
+        raise SystemExit("--corpus-non-taxonomy-only cannot be combined with --taxonomy-only")
     torch.manual_seed(args.seed)
     data = load_dataset(args.dataset)
     print_first_parse_baseline(data["evaluation"])
@@ -550,6 +559,11 @@ def train_model(args: argparse.Namespace) -> None:
         taxonomy,
         node2vec_config,
     ).to(device)
+    if args.corpus_non_taxonomy_only:
+        # The graph indices also contain isolated vocabulary entries; only edge
+        # endpoints actually participate in the taxonomy.
+        model.corpus_frozen_ids = torch.zeros(len(taxonomy.indices), dtype=torch.bool, device=device)
+        model.corpus_frozen_ids[taxonomy.edge_index.flatten().to(device)] = True
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay
     )
@@ -561,6 +575,7 @@ def train_model(args: argparse.Namespace) -> None:
                 "functions": len(vocabulary),
                 "device": str(device),
                 "taxonomy_only": args.taxonomy_only,
+                "corpus_non_taxonomy_only": args.corpus_non_taxonomy_only,
             }
     if taxonomy != None:
         stats.update({ "taxonomy_nodes": len(taxonomy.indices),
@@ -775,6 +790,11 @@ def build_parser() -> argparse.ArgumentParser:
             "train only with taxonomy random walks seeded from the training "
             "corpus; use corpus labels only for metric reporting"
         ),
+    )
+    train.add_argument(
+        "--corpus-non-taxonomy-only",
+        action="store_true",
+        help="use corpus loss to update only functions absent from taxonomy edges (requires --semantics)",
     )
     train.add_argument("--walk-length", type=int, default=20)
     train.add_argument("--context-size", type=int, default=15)
