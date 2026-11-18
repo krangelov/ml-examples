@@ -426,19 +426,19 @@ if torch is not None:
 
         def save(self, path: Path) -> None:
             path.parent.mkdir(parents=True, exist_ok=True)
+            state = {
+                name: value for name, value in self.state_dict().items()
+                if not name.startswith("node2vec.")
+            }
+            # Taxonomy indices extend the function vocabulary in order. Clone
+            # the slice so serialization does not retain the larger storage.
+            state["embedding.weight"] = state["embedding.weight"][:len(self.indices)].clone()
             torch.save(
                 {
                     "version": 3,
                     "indices": self.indices,
                     "dimension": self.dimension,
-                    "node2vec_config": self.node2vec_config,
-                    #"taxonomy_indices": self.taxonomy.indices,
-                    #"edge_index": (
-                    #    self.taxonomy.edge_index.detach().cpu()
-                    #    if self.taxonomy.edge_index is not None
-                    #    else None
-                    #),
-                    "state_dict": self.state_dict(),
+                    "state_dict": state,
                 },
                 path,
             )
@@ -472,17 +472,9 @@ if torch is not None:
                 checkpoint = torch.load(path, map_location=device)
             if checkpoint.get("version") != 3:
                 raise ValueError(f"unsupported model version in {path}")
-            taxonomy = None
-            if checkpoint["edge_index"] is not None:
-                taxonomy = TaxonomyGraph(
-                    checkpoint["taxonomy_indices"],
-                    checkpoint["edge_index"].cpu(),
-                )
             model = cls(
                 checkpoint["indices"],
                 checkpoint["dimension"],
-                taxonomy=taxonomy,
-                node2vec_config=checkpoint["node2vec_config"],
             )
             model.load_state_dict(checkpoint["state_dict"])
             return model.to(device)
